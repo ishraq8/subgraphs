@@ -4,7 +4,7 @@ import {
     FundsDrawnDown as FundsDrawnDownEvent,
     PaymentMade as PaymentMadeEvent,
     Repossessed as RepossessedEvent,
-    NewTermsAccepted as NewTermsAcceptedEvent
+    NewTermsAccepted as NewTermsAcceptedEvent,
 } from "../../generated/templates/LoanV3/LoanV3";
 import { LoanV3 as LoanV3Contract } from "../../generated/templates/LoanV3/LoanV3";
 
@@ -12,10 +12,14 @@ import { ONE_BI, SEC_PER_DAY, ZERO_BI } from "../common/constants";
 import {
     getOrCreateInterestRate,
     getOrCreateLoan,
-    getOrCreateMarket
+    getOrCreateMarket,
 } from "../common/mappingHelpers/getOrCreate/markets";
 import { getOrCreateProtocol } from "../common/mappingHelpers/getOrCreate/protocol";
-import { getOrCreateFinancialsDailySnapshot } from "../common/mappingHelpers/getOrCreate/snapshots";
+import {
+    getOrCreateFinancialsDailySnapshot,
+    getOrCreateMarketDailySnapshot,
+    getOrCreateMarketHourlySnapshot,
+} from "../common/mappingHelpers/getOrCreate/snapshots";
 import { getOrCreateToken } from "../common/mappingHelpers/getOrCreate/supporting";
 import { createBorrow, createRepay } from "../common/mappingHelpers/getOrCreate/transactions";
 import { intervalUpdate } from "../common/mappingHelpers/update/intervalUpdate";
@@ -50,10 +54,7 @@ export function handleNewTermsAccepted(event: NewTermsAcceptedEvent): void {
     );
 
     interestRate.duration = bigDecimalToBigInt(
-        paymentIntervalSec
-            .times(paymentsRemaining)
-            .toBigDecimal()
-            .div(SEC_PER_DAY.toBigDecimal())
+        paymentIntervalSec.times(paymentsRemaining).toBigDecimal().div(SEC_PER_DAY.toBigDecimal())
     ).toI32();
 
     // Interst rate for V2/V3 stored as apr in units of 1e18, (i.e. 1% is 0.01e18).
@@ -121,7 +122,7 @@ export function handlePaymentMade(event: PaymentMadeEvent): void {
     const inputToken = getOrCreateToken(Address.fromString(market.inputToken));
     const treasuryFeeUSD = getTokenAmountInUSD(event, inputToken, treasuryFee);
     market._cumulativeTreasuryRevenue = market._cumulativeTreasuryRevenue.plus(treasuryFee);
-    market._cumulativeProtocolSideRevenueUSD = market._cumulativeProtocolSideRevenueUSD.plus(treasuryFeeUSD);
+    market.cumulativeProtocolSideRevenueUSD = market.cumulativeProtocolSideRevenueUSD.plus(treasuryFeeUSD);
     market.save();
 
     ////
@@ -135,10 +136,23 @@ export function handlePaymentMade(event: PaymentMadeEvent): void {
     // Update financial snapshot
     ////
     const financialsDailySnapshot = getOrCreateFinancialsDailySnapshot(event);
-    financialsDailySnapshot.dailyProtocolSideRevenueUSD = financialsDailySnapshot.dailyProtocolSideRevenueUSD.plus(
-        treasuryFeeUSD
-    );
+    financialsDailySnapshot.dailyProtocolSideRevenueUSD =
+        financialsDailySnapshot.dailyProtocolSideRevenueUSD.plus(treasuryFeeUSD);
+    financialsDailySnapshot.dailyRepayUSD = financialsDailySnapshot.dailyRepayUSD.plus(repay.amountUSD);
     financialsDailySnapshot.save();
+
+    ////
+    // Update market snapshot
+    ////
+    const marketDailySnapshot = getOrCreateMarketDailySnapshot(event, market);
+    marketDailySnapshot.dailyProtocolSideRevenueUSD =
+        marketDailySnapshot.dailyProtocolSideRevenueUSD.plus(treasuryFeeUSD);
+    marketDailySnapshot.save();
+
+    const MarketHourlySnapshot = getOrCreateMarketHourlySnapshot(event, market);
+    MarketHourlySnapshot.hourlyProtocolSideRevenueUSD =
+        MarketHourlySnapshot.hourlyProtocolSideRevenueUSD.plus(treasuryFeeUSD);
+    MarketHourlySnapshot.save();
 
     ////
     // Trigger interval update

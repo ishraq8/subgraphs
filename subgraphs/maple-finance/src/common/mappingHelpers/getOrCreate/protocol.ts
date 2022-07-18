@@ -15,7 +15,7 @@ import {
     PROTOCOL_SUBGRAPH_VERSION,
     PROTOCOL_TYPE,
     ZERO_BD,
-    ZERO_I32
+    ZERO_I32,
 } from "../../constants";
 
 export function getOrCreateProtocol(): LendingProtocol {
@@ -46,6 +46,7 @@ export function getOrCreateProtocol(): LendingProtocol {
         protocol.cumulativeBorrowUSD = ZERO_BD;
         protocol.cumulativeLiquidateUSD = ZERO_BD;
         protocol.mintedTokenSupplies = new Array<BigInt>();
+        protocol.totalPoolCount = ZERO_I32;
 
         protocol._treasuryFee = PROTOCOL_INITIAL_TREASURY_FEE;
 

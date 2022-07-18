@@ -3,7 +3,7 @@ import { Address } from "@graphprotocol/graph-ts";
 import {
     Drawdown as DrawdownEvent,
     PaymentMade as PaymentMadeEvent,
-    Liquidation as LiquidationEvent
+    Liquidation as LiquidationEvent,
 } from "../../generated/templates/LoanV1/LoanV1";
 import { ZERO_BI } from "../common/constants";
 import { getOrCreateToken } from "../common/mappingHelpers/getOrCreate/supporting";
@@ -13,7 +13,7 @@ import { getOrCreateProtocol } from "../common/mappingHelpers/getOrCreate/protoc
 import {
     getOrCreateFinancialsDailySnapshot,
     getOrCreateMarketDailySnapshot,
-    getOrCreateMarketHourlySnapshot
+    getOrCreateMarketHourlySnapshot,
 } from "../common/mappingHelpers/getOrCreate/snapshots";
 import { createBorrow, createRepay } from "../common/mappingHelpers/getOrCreate/transactions";
 import { intervalUpdate } from "../common/mappingHelpers/update/intervalUpdate";
@@ -38,7 +38,7 @@ export function handleDrawdown(event: DrawdownEvent): void {
     const inputToken = getOrCreateToken(Address.fromString(market.inputToken));
     const protocolRevenueUSD = getTokenAmountInUSD(event, inputToken, treasuryFeePaid);
     market._cumulativeTreasuryRevenue = market._cumulativeTreasuryRevenue.plus(treasuryFeePaid);
-    market._cumulativeProtocolSideRevenueUSD = market._cumulativeProtocolSideRevenueUSD.plus(protocolRevenueUSD);
+    market.cumulativeProtocolSideRevenueUSD = market.cumulativeProtocolSideRevenueUSD.plus(protocolRevenueUSD);
     market.save();
 
     ////
@@ -62,6 +62,19 @@ export function handleDrawdown(event: DrawdownEvent): void {
         getTokenAmountInUSD(event, inputToken, treasuryFeePaid)
     );
     financialsDailySnapshot.save();
+
+    ////
+    // Update market snapshot
+    ////
+    const marketDailySnapshot = getOrCreateMarketDailySnapshot(event, market);
+    marketDailySnapshot.dailyProtocolSideRevenueUSD =
+        marketDailySnapshot.dailyProtocolSideRevenueUSD.plus(protocolRevenueUSD);
+    marketDailySnapshot.save();
+
+    const MarketHourlySnapshot = getOrCreateMarketHourlySnapshot(event, market);
+    MarketHourlySnapshot.hourlyProtocolSideRevenueUSD =
+        MarketHourlySnapshot.hourlyProtocolSideRevenueUSD.plus(protocolRevenueUSD);
+    MarketHourlySnapshot.save();
 
     ////
     // Trigger interval update
@@ -89,6 +102,13 @@ export function handlePaymentMade(event: PaymentMadeEvent): void {
     loan.principalPaid = loan.principalPaid.plus(repay._principalPaid);
     loan.interestPaid = loan.interestPaid.plus(repay._interestPaid);
     loan.save();
+
+    ////
+    // Update financial snapshot
+    ////
+    const financialsDailySnapshot = getOrCreateFinancialsDailySnapshot(event);
+    financialsDailySnapshot.dailyRepayUSD = financialsDailySnapshot.dailyRepayUSD.plus(repay.amountUSD);
+    financialsDailySnapshot.save();
 
     ////
     // Trigger interval update

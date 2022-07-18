@@ -36,6 +36,7 @@ export const schema120 = (): string => {
       }
       rewardTokens {
         id
+        type
         token {
           id
           decimals
@@ -75,6 +76,7 @@ export const schema130 = (): string => {
         }
         rewardTokens {
           id
+          type
           token {
             id
             decimals
